@@ -1,0 +1,83 @@
+{
+  "seed": 20260810,
+  "device": "auto",
+  "data": {
+    "root": null,
+    "input_fields": [
+      "force",
+      "encoder_displacement"
+    ],
+    "target_fields": [
+      "disturbance"
+    ],
+    "time_start": 0,
+    "time_stop": null,
+    "time_stride": 1,
+    "preprocessing": {
+      "name": "none"
+    },
+    "memory_cache": false,
+    "batch_size": 64,
+    "eval_batch_size": null,
+    "num_workers": 4,
+    "max_train_samples": null,
+    "max_val_samples": null,
+    "max_test_samples": null
+  },
+  "model": {
+    "name": "fno1d",
+    "embed_dim": 64,
+    "modes": 128,
+    "width": 128,
+    "lift_dim": 64,
+    "num_blocks": 1
+  },
+  "loss": {
+    "name": "spectral_rl2",
+    "bands": [
+      [
+        0,
+        10,
+        0.5
+      ],
+      [
+        10,
+        18,
+        1.0
+      ],
+      [
+        18,
+        250,
+        5.0
+      ]
+    ]
+  },
+  "optimizer": {
+    "name": "adamw",
+    "lr": 0.00283,
+    "weight_decay": 0.0001
+  },
+  "scheduler": {
+    "name": "cosine",
+    "eta_min": 3e-06
+  },
+  "training": {
+    "epochs": 500,
+    "validate_every": 20,
+    "grad_clip": 0.0,
+    "keep_resume_learning_rate": false,
+    "amp": "none",
+    "compile": false
+  },
+  "checkpoint": {
+    "save_best": true,
+    "save_last": true
+  },
+  "experiment": {
+    "root_dir": "experiments",
+    "run_name": null,
+    "output_dir": null,
+    "overwrite": true,
+    "save": true
+  }
+}

@@ -1,0 +1,43 @@
+[data] train=5000 val=500 test=200
+  [S5a step 0.1->0.01->0.001] ep  10 train 7.952e-01 val rl2 7.843e-01
+  [S5a step 0.1->0.01->0.001] ep  20 train 5.780e-01 val rl2 5.670e-01
+  [S5a step 0.1->0.01->0.001] ep  30 train 3.608e-01 val rl2 3.498e-01
+  [S5a step 0.1->0.01->0.001] ep  40 train 1.436e-01 val rl2 1.326e-01
+  [S5a step 0.1->0.01->0.001] ep  50 train 2.799e-05 val rl2 3.136e-05
+  [S5a step 0.1->0.01->0.001] ep  60 train 2.488e-05 val rl2 9.936e-06
+  [S5a step 0.1->0.01->0.001] ep  70 train 3.634e-06 val rl2 3.677e-06
+  [S5a step 0.1->0.01->0.001] ep  80 train 3.376e-06 val rl2 3.482e-06
+  [S5a step 0.1->0.01->0.001] ep  90 train 3.129e-06 val rl2 3.325e-06
+  [S5a step 0.1->0.01->0.001] ep 100 train 2.902e-06 val rl2 2.938e-06
+  [S5a step 0.1->0.01->0.001] ep 110 train 2.791e-06 val rl2 2.828e-06
+  [S5a step 0.1->0.01->0.001] ep 120 train 2.776e-06 val rl2 2.805e-06
+[S5a step 0.1->0.01->0.001] FINAL official test rl2 = 2.886e-06 (120 ep, 189.9s)
+  [S5b drop 0.1->0.001@60] ep  10 train 7.952e-01 val rl2 7.843e-01
+  [S5b drop 0.1->0.001@60] ep  20 train 5.780e-01 val rl2 5.671e-01
+  [S5b drop 0.1->0.001@60] ep  30 train 3.608e-01 val rl2 3.498e-01
+  [S5b drop 0.1->0.001@60] ep  40 train 1.436e-01 val rl2 1.326e-01
+  [S5b drop 0.1->0.001@60] ep  50 train 2.465e-05 val rl2 1.382e-05
+  [S5b drop 0.1->0.001@60] ep  60 train 1.792e-05 val rl2 1.951e-05
+  [S5b drop 0.1->0.001@60] ep  70 train 3.674e-06 val rl2 3.723e-06
+  [S5b drop 0.1->0.001@60] ep  80 train 3.640e-06 val rl2 3.698e-06
+  [S5b drop 0.1->0.001@60] ep  90 train 3.620e-06 val rl2 3.667e-06
+  [S5b drop 0.1->0.001@60] ep 100 train 3.590e-06 val rl2 3.643e-06
+[S5b drop 0.1->0.001@60] FINAL official test rl2 = 3.747e-06 (100 ep, 155.6s)
+  [S5c sgd 0.1 fixed 120] ep  10 train 7.952e-01 val rl2 7.843e-01
+  [S5c sgd 0.1 fixed 120] ep  20 train 5.780e-01 val rl2 5.670e-01
+  [S5c sgd 0.1 fixed 120] ep  30 train 3.608e-01 val rl2 3.498e-01
+  [S5c sgd 0.1 fixed 120] ep  40 train 1.436e-01 val rl2 1.326e-01
+  [S5c sgd 0.1 fixed 120] ep  50 train 2.376e-05 val rl2 4.850e-05
+  [S5c sgd 0.1 fixed 120] ep  60 train 2.029e-05 val rl2 2.409e-05
+  [S5c sgd 0.1 fixed 120] ep  70 train 1.534e-05 val rl2 1.643e-05
+  [S5c sgd 0.1 fixed 120] ep  80 train 1.793e-05 val rl2 2.766e-05
+  [S5c sgd 0.1 fixed 120] ep  90 train 1.870e-05 val rl2 3.509e-05
+  [S5c sgd 0.1 fixed 120] ep 100 train 1.482e-05 val rl2 2.585e-05
+  [S5c sgd 0.1 fixed 120] ep 110 train 1.933e-05 val rl2 2.210e-05
+  [S5c sgd 0.1 fixed 120] ep 120 train 2.297e-05 val rl2 1.801e-05
+[S5c sgd 0.1 fixed 120] FINAL official test rl2 = 2.039e-05 (120 ep, 187.1s)
+
+=== SUMMARY ===
+  S5a step 0.1->0.01->0.001: official test rl2 = 2.886e-06
+  S5b drop 0.1->0.001@60: official test rl2 = 3.747e-06
+  S5c sgd 0.1 fixed 120: official test rl2 = 2.039e-05

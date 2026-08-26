@@ -1,0 +1,21 @@
+# oled-neural-operator runtime dependencies (canonical spec).
+# Install into a project-local venv only — never into system/user site-packages:
+#   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+#
+# Tests (tests/) are pure stdlib unittest and do not need any of these.
+
+# Neural operator training / inference. 2.x line; pins upper bound at <2.6
+# to stay on wheels compatible with the project's CUDA build history.
+torch>=2.1.0,<2.6.0
+
+# Array math. numpy>=1.24 for PyTorch 2.x interop; upper bound <3.0 guards
+# the numpy-2 ABI transition across torch 2.1-2.5 wheel lines.
+numpy>=1.24.0,<3.0.0
+
+# HDF5 dataset access (one .h5 per simulation, lazy per-sample open).
+h5py>=3.9.0
+
+# Optional: pretty-print of config files (configs/config.yaml is deliberately
+# JSON-compatible, so the pipeline runs without PyYAML). Install manually if
+# you want YAML round-tripping for local config editing tools.
+# pyyaml>=6.0

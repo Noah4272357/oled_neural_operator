@@ -1,0 +1,77 @@
+{
+  "checkpoint": {
+    "save_best": true,
+    "save_last": true
+  },
+  "data": {
+    "batch_size": 64,
+    "eval_batch_size": null,
+    "input_fields": [
+      "force",
+      "encoder_displacement"
+    ],
+    "max_test_samples": null,
+    "max_train_samples": null,
+    "max_val_samples": null,
+    "memory_cache": false,
+    "num_workers": 4,
+    "preprocessing": {
+      "name": "none"
+    },
+    "root": "/nishome/charliewang/data/neural_operator_3",
+    "target_fields": [
+      "disturbance"
+    ],
+    "time_start": 0,
+    "time_stop": null,
+    "time_stride": 1
+  },
+  "device": "cpu",
+  "experiment": {
+    "output_dir": null,
+    "overwrite": true,
+    "resolved_dir": "/nishome/charliewang/forge-projects/oled-neural-operator/experiments/m61_8ch_s20260810",
+    "root_dir": "experiments",
+    "run_name": "m61_8ch_s20260810",
+    "save": true
+  },
+  "loss": {
+    "name": "relative_l2"
+  },
+  "model": {
+    "embed_dim": 64,
+    "lift_dim": 64,
+    "modes": 128,
+    "name": "spectral",
+    "num_blocks": 1,
+    "whiten_path": "outputs/spectral_whiten/whiten_8ch.pt",
+    "width": 128
+  },
+  "optimizer": {
+    "lr": 0.1,
+    "momentum": 0.9,
+    "name": "sgd",
+    "weight_decay": 0.0
+  },
+  "runtime": {
+    "resume_checkpoint": null
+  },
+  "scheduler": {
+    "eta_min": 0.0,
+    "gamma": 0.1,
+    "milestones": [
+      60,
+      100
+    ],
+    "name": "multistep"
+  },
+  "seed": 20260810,
+  "training": {
+    "amp": "none",
+    "compile": false,
+    "epochs": 120,
+    "grad_clip": 0.0,
+    "keep_resume_learning_rate": false,
+    "validate_every": 10
+  }
+}

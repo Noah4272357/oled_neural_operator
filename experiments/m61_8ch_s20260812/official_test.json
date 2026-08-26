@@ -1,0 +1,12 @@
+{
+  "checkpoint": "experiments/m61_8ch_s20260812/best_model.pt",
+  "checkpoint_epoch": 110,
+  "split": "test",
+  "samples": 200,
+  "metrics": {
+    "mse": 3.304267402694611,
+    "rmse": 1.817764396915786,
+    "relative_l2": 0.9999961302006269,
+    "seconds": 0.161250164732337
+  }
+}

@@ -1,0 +1,38 @@
+__pycache__/
+*.py[cod]
+
+.venv/
+venv/
+.pytest_cache/
+
+# Generated model checkpoints are kept locally, not in Git.
+*.pt
+
+# FNO training run directories (fno1d_w{width}_b{blocks}_seed{seed}_{timestamp}).
+experiments/fno1d_*/
+
+# run-artifact placeholders: only .gitkeep is committed.
+outputs/*
+checkpoints/*
+logs/*
+!outputs/.gitkeep
+!checkpoints/.gitkeep
+!logs/.gitkeep
+
+
+# run 分析产物（由 scripts/analysis/ 入库脚本生成，不入库）
+experiments/analysis/*/fourier_analysis.json
+
+# Pure-spectral M6 training run directories (spectral_w{width}_b{blocks}_seed{seed}_{timestamp}).
+experiments/spectral_*/
+# M6 run-name training run directories (--run-name m61_s<seed>, no timestamp suffix).
+experiments/m61_s*/
+experiments/m63_residual_targets/
+
+# LaTeX build artifacts (slide/): only .tex and .pdf are committed.
+slide/*.aux
+slide/*.log
+slide/*.nav
+slide/*.out
+slide/*.snm
+slide/*.toc

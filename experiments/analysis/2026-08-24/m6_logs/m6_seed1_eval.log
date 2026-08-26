@@ -1,0 +1,1 @@
+{"checkpoint": "experiments/spectral_w128_b1_seed20260810_20260825-021611/best_model.pt", "checkpoint_epoch": 120, "metrics": {"mse": 2.661144736374193e-11, "relative_l2": 2.8378861881815567e-06, "rmse": 5.158628438232583e-06, "seconds": 0.18347486294806004}, "samples": 200, "split": "test"}

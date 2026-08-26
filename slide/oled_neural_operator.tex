@@ -1,0 +1,451 @@
+% !TEX program = xelatex
+% OLED 微动台逆扰动力算子学习：最佳 FNO（M5-3）、M6 纯谱模型 与 8ch SGD 变体
+% 唯一规范源：本 .tex 文件；数据与结果出处见末页。
+\documentclass[aspectratio=169]{beamer}
+\usepackage{fontspec}
+\usepackage{xeCJK}
+\setCJKmainfont{Noto Sans CJK SC}[AutoFakeBold=2.5]
+\setCJKsansfont{Noto Sans CJK SC}[AutoFakeBold=2.5]
+\setCJKmonofont{Noto Sans CJK SC}[AutoFakeBold=2.5]
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+
+\usetheme{Madrid}
+
+% 语义色：\pos 蓝（正确/正面）、\con 橙（局限）、\HL 绿（关键发现）
+\newcommand{\pos}[1]{\textcolor{blue!70!black}{#1}}
+\newcommand{\con}[1]{\textcolor{orange!85!black}{#1}}
+\newcommand{\HL}[1]{\textcolor{green!45!black}{#1}}
+
+\title{OLED 微动台逆扰动力算子学习}
+\subtitle{最佳 FNO 模型（M5-3）、M6 纯谱模型 与 8ch SGD 变体：架构设计与超参数选取}
+\author{oled-neural-operator 项目}
+\date{2026-08-26}
+
+\begin{document}
+
+\begin{frame}[plain]
+  \titlepage
+\end{frame}
+
+%-----------------------------------------------------------
+\begin{frame}{任务：学习逆扰动力算子（仿真替代模型）}
+  \begin{block}{为什么做：数据集太大，仿真替代模型省时}
+    从可测轨迹预测扰动力 $f_{\mathrm{dist}}$，替代昂贵仿真；
+    目标为官方测试集相对 L2 误差 $\le 10^{-4}$（硬门）。
+  \end{block}
+  \begin{equation*}
+    M\,\ddot{q} = B\,u + f_{\mathrm{dist}}
+    \qquad\Rightarrow\qquad
+    f_{\mathrm{dist}} = M\,\ddot{q} - B\,u \ \text{\con{精确线性 LTI}}
+  \end{equation*}
+  \begin{itemize}
+    \item 输入 13 通道（官方口径）：\pos{force(4) + q(3) + $\dot q$(3) + $\ddot q$(3)}，另拼接时间 grid
+    \item 输出 2 通道：\pos{$f_{\mathrm{dist}}$(2)}（每轴一个分量）
+    \item 8 通道变体（force + encoder\_displacement）仅 M6 有，官方以 13 通道为准
+  \end{itemize}
+\end{frame}
+
+%-----------------------------------------------------------
+\begin{frame}{数据集：形状与划分}
+  \begin{table}
+    \centering
+    \begin{tabular}{llll}
+      \toprule
+      项目 & 数值 & 项目 & 数值 \\
+      \midrule
+      时间网格 & 501 点，$dt$=1\,ms，0.5\,s & input & $(501,13)$ 通道在后 \\
+      train / val / test & 5000 / 500 / 200 & target & $(501,2)$ \\
+      HDF5 & 每仿真一个 .h5 & grid & $(501,)$ \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \textbf{neural\_operator\_2}（旧档）：schema 2.0，无 preroll
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \textbf{neural\_operator\_3}（官方战役档）：\pos{preroll 0.5\,s + 积分 substeps 5}；
+      同方程、同分布、同划分，仅抑制初始瞬态、积分更精确
+    \end{column}
+  \end{columns}
+  \vspace{2pt}
+  M3/M5/M6 全部以 v3 为准；懒加载、train shuffle、val/test 保序、seed 确定性
+\end{frame}
+
+%-----------------------------------------------------------
+\begin{frame}{最佳 FNO 模型（一）：FNO1d 架构总览}
+  \begin{block}{非线性神经算子：谱域乘性核 + 通道点向卷积 + GELU + 残差}
+    $u \mapsto f_{\mathrm{dist}}$：13 通道时间函数 $\to$ 2 通道时间函数；
+    谱卷积只乘前 $m$ 个傅里叶模态（截断正则）
+  \end{block}
+  \begin{equation*}
+    \mathcal{K}(\phi)(x)=\mathrm{irfft}\big(R_\phi \odot \mathrm{rfft}(\phi)\big)
+    \qquad
+    x \leftarrow x + \mathrm{GELU}\big(\mathcal{K}x + Wx\big)
+  \end{equation*}
+  \begin{table}
+    \centering
+    \small
+    \begin{tabular}{lll}
+      \toprule
+      阶段 & 模块 & 输入 $\to$ 输出 \\
+      \midrule
+      lift & fc0：Linear 14$\to$64$\to$128（GELU） & $(B,501,14)\to(B,501,128)$ \\
+      blocks & FNOBlock1d $\times$1（padding=2） & $(B,128,503)\to(B,128,501)$ \\
+      project & fc1：128$\to$64$\to$128$\to$2 & $(B,501,128)\to(B,501,2)$ \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+  \vspace{1pt}
+  \pos{grid 拼接进输入}（13+1 通道）；padding 补非周期域后裁掉；输出 disturbance 2 通道
+\end{frame}
+
+%-----------------------------------------------------------
+\begin{frame}{最佳 FNO 模型（二）：模块内部设计}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \textbf{SpectralConv1d（谱通路）}
+      \begin{itemize}
+        \item 权重 \texttt{weights1}：\texttt{cfloat} $(128,128,128)$，每输出通道 128 个复模态
+        \item 初始化 \pos{scale $=1/(\text{in}\cdot\text{out})$}（$1/128^2$）
+        \item \pos{rfft 截断}：只保留前 \texttt{modes}=128 个模态，其余置零
+        \item 复乘 einsum \texttt{"bix,iox->box"}；irfft 回原长
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \textbf{FNOBlock1d（双通路 + 残差）}
+      \begin{itemize}
+        \item 谱通路 $\mathcal{K}$（SpectralConv1d 128$\to$128）
+        \item 点向通路 $W$：Conv1d(128,128,1)（局部信息）
+        \item GELU 激活后 \pos{残差相加} $x \leftarrow x + \mathrm{GELU}(\mathcal{K}x+Wx)$
+        \item fc1 投影：128$\to$64$\to$128$\to$2（两层 GELU）
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \begin{table}
+    \centering
+    \small
+    \begin{tabular}{lccccc}
+      \toprule
+      参数量分解 & fc0 & 谱核 & Conv1d & fc1 & 合计 \\
+      \midrule
+      复数元素 & 9.1k & \pos{2.097M} & 16.4k & 16.6k & $\approx$ \pos{2.14M} \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+\end{frame}
+
+%-----------------------------------------------------------
+\begin{frame}{最佳 FNO 模型（三）：架构超参数选取}
+  \begin{table}
+    \centering
+    \begin{tabular}{llll}
+      \toprule
+      超参 & 取值 & 超参 & 取值 \\
+      \midrule
+      width & \pos{128} & modes & \pos{128} \\
+      num\_blocks & \pos{1} & embed\_dim / lift\_dim & 64 / 64 \\
+      激活 & GELU & padding & 2（非周期域） \\
+      通道 & 13+grid $\to$ 2 & 参数量 & $\approx$2.14M 复参 \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+  \begin{itemize}
+    \item 形态来源：M3 战役 \pos{P3 形态决策}（w64 m128 起步；判定门 width$\to$128 不升），E 系列沿用默认形态
+    \item \pos{加宽/加块被证据否决}：blocks 1$\to$2 冻结版训练 \con{9.93e-4（E21，杀）}——随机新块 cfloat 扰动破坏 fc1 输入分布，800\,ep 无法补偿
+    \item \con{capacity 杠杆不在架构}：E 系列在固定架构上以训练超参（lr/epoch/batch）链式下探误差
+  \end{itemize}
+\end{frame}
+
+%-----------------------------------------------------------
+\begin{frame}{最佳 FNO 模型（四）：训练超参数——链式微调协议}
+  \begin{table}
+    \centering
+    \small
+    \begin{tabular}{llll}
+      \toprule
+      超参 & 取值 & 超参 & 取值 \\
+      \midrule
+      optimizer & AdamW & batch & 8（E15 起） \\
+      lr（E31 末跳） & \pos{5e-5 慢爬} & lr 调度 & cosine（eta\_min 3e-6） \\
+      weight\_decay & 1e-4 & epochs / 跳 & 1200 \\
+      validate\_every & 20 & 续链 & resume 上一跳 best \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+  \begin{itemize}
+    \item 链：E1（b64 从零 5.9e-4）$\to$ E15 $\to$ E24 $\to$ E26 $\to$ E30 $\to$ \pos{E31 2.03e-4}
+    \item \pos{b8 突破}（E15）：步数预算 500k 打破 b64 瓶颈；lr 效应在 2--3e-4 饱和（E27）
+    \item \pos{慢爬 5e-5 是持久微调模式}（E31 $-8\%$ 优于 E30 的 $-1.4\%$）；链式动力学须匹配（E28）
+    \item M5-3 精修头：训练后 \pos{闭式复数 ridge-LS} 拟合残差，逐 bin 共享复映射 $(251,2,12)$，零梯度
+  \end{itemize}
+\end{frame}
+
+%-----------------------------------------------------------
+\begin{frame}{最佳 FNO 模型（五）：结果与学习极限}
+  \begin{table}
+    \centering
+    \begin{tabular}{lcc}
+      \toprule
+      阶段 & test.relative\_l2 & 说明 \\
+      \midrule
+      E31（纯训练，v2 链尾） & 2.03e-4 & 慢爬第四跳 \\
+      P2a（换档 v3 续链） & 1.9622e-4 & 增益 +3.7\% <5\% $\Rightarrow$ 续链衰竭 \\
+      \HL{M5-3（+ 闭式精修头）} & \HL{1.85885e-4} & $-5.26\%$，零梯度 \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+  \begin{itemize}
+    \item 距硬门 $10^{-4}$ 差 \con{1.86$\times$}，全链关闭：初始化破坏 / 续链衰竭 / 残差 87\% 非线性
+    \item 瓶颈：\con{GELU 互调 + modes 截断 + 优化条件数}——表示能力而非数据极限
+    \item 启示：非线性对精确线性任务\textbf{有害}；错误类正确 + 优化条件改善 $\Rightarrow$ M6
+  \end{itemize}
+\end{frame}
+
+%-----------------------------------------------------------
+\begin{frame}{M6 纯谱模型（一）：架构与计算图}
+  \begin{block}{设计动机：数据内蕴精确 LTI $\Rightarrow$ 共享复线性映射即精确正确类}
+    $f_{\mathrm{dist}} = M\ddot{q} - Bu$ 频率无关 $\Rightarrow$ 全频点共享同一复矩阵；
+    \pos{无需非线性}；per-bin 独立映射（6.5k 复参）对训练子集敏感（S2，弃）
+  \end{block}
+  \begin{equation*}
+    \hat{y} = \mathrm{irfft}\big(M \, W \, \mathrm{rfft}(x)\big)
+  \end{equation*}
+  \begin{table}
+    \centering
+    \small
+    \begin{tabular}{llll}
+      \toprule
+      步骤 & 形状 & 内容 & 状态 \\
+      \midrule
+      rfft (dim=1) & $(B,501,13) \to (B,251,13)$ & 频域分解 & 固定 \\
+      白化 $W$ & $(B,251,13)$ & 每 (样本,频点) 协方差 $\to I$ & \pos{冻结 buffer} \\
+      $M$ 映射 & $(B,251,2)$ & 学习参数 \pos{26 复参} & \HL{唯一可训练} \\
+      irfft & $(B,501,2)$ & 回时域 & 固定 \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+  \begin{itemize}
+    \item $M$ 初始化 scale $=1/13$；GridAdapter 全链路转 \pos{complex128}；全链路无非线性
+  \end{itemize}
+\end{frame}
+
+%-----------------------------------------------------------
+\begin{frame}{M6 纯谱模型（二）：白化设计 $W = C^{-1/2}$}
+  \begin{block}{为什么：裸 Gram 条件数差 $\Rightarrow$ 一阶优化器冻结}
+    裸共享映射损失 Hessian 特征值跨 \con{$\sim$5 量级}（S1：1.7e3--2.4e4）
+    $\Rightarrow$ AdamW lr1e-3 10\,ep 几乎不动（train rl2 0.9995）
+  \end{block}
+  \begin{equation*}
+    C = \frac{1}{N_{\text{samples}} N_{\text{bin}}}
+        \sum_{n}\sum_{k} \hat x_{n,k}^{H} \hat x_{n,k}
+    \qquad
+    W = C^{-1/2} \quad (N_{\text{pairs}} = 5000 \times 251)
+  \end{equation*}
+  \begin{itemize}
+    \item 生成：train 全量 5000 样本\pos{确定性单遍}，eigh 分解 $(evecs \cdot \mathrm{diag}(1/\sqrt{\lambda}))\,evecs^H$，$\lambda$ clip $10^{-10}$，complex128
+    \item 归一化是关键：缺 $1/N_{\text{pairs}}$ 时 $M^{*}$ 放大 \con{$\sim$1120$\times$}（S1w 冻结，非收敛失败）
+    \item 效果：白化后每 (样本, bin) 协方差 $= I$，批 Hessian $\approx$ 良态 $\Rightarrow$ \pos{SGD 可收敛}
+  \end{itemize}
+\end{frame}
+
+%-----------------------------------------------------------
+\begin{frame}{M6 纯谱模型（三）：超参数选取——优化器决策链}
+  \begin{block}{三个一阶候选全部证伪后，SGD+momentum 为唯一已验证路径}
+    L-BFGS 失效（R3b 9.44e-1）、AdamW 固定步长地板（R3d F4 机理）、
+    AdamW+cosine 过早退火（R3e）
+  \end{block}
+  \begin{table}
+    \centering
+    \small
+    \begin{tabular}{lcl}
+      \toprule
+      run & 配置 & 官方 test rl2 \\
+      \midrule
+      R3a & scale 归一化 + L-BFGS & 7.668e-3 \\
+      R3b & 每对白化 + L-BFGS & \con{9.44e-1（关闭）} \\
+      R3c & 每对白化 + \pos{SGD-m lr0.1} $\times$100\,ep & \pos{1.81e-5（首个达门 5.5$\times$）} \\
+      R3d & 每对白化 + AdamW 固定 1e-2 & \con{6.99e-4（F4 地板）} \\
+      R3e & 每对白化 + AdamW cosine 1e-2 & \con{6.46e-2（过早退火）} \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+  \begin{itemize}
+    \item R3c 动量噪声平台 1.5e-5--2.4e-5 $\Rightarrow$ 需 \pos{lr 步进衰减}（见下页）
+  \end{itemize}
+\end{frame}
+
+%-----------------------------------------------------------
+\begin{frame}{M6 纯谱模型（四）：超参数选取——lr 与调度}
+  \begin{table}
+    \centering
+    \begin{tabular}{llll}
+      \toprule
+      run & 调度 & test rl2 & 判定 \\
+      \midrule
+      \HL{S5a} & step \pos{0.1$\to$0.01$\to$0.001} $\times$120\,ep（60/40/20） & \HL{2.886e-6} & \HL{最终配方} \\
+      S5b & 单跳 0.1$\to$0.001@60 $\times$100\,ep & 3.747e-6 & 略差 \\
+      S5c & 固定 0.1 $\times$120\,ep & \con{2.039e-5} & \con{动量噪声平台} \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+  \begin{itemize}
+    \item \pos{衰减必要性}：S5c vs S5a 差 7.1$\times$——固定 lr 停在动量噪声平台
+    \item 步进衰减实现：multistep \texttt{[60,100]} $\gamma$0.1；best = last ep（两次退火后收敛平台）
+    \item 其余超参：batch 64（优化战役新默认）、CPU float64（禁 TF32）、120\,ep $\approx$ 3.2\,min/seed
+    \item 禁止 resume 微调（F4 证伪：AdamW 微调 300\,ep 恶化 1400$\times$）
+  \end{itemize}
+\end{frame}
+
+%-----------------------------------------------------------
+\begin{frame}{损失函数设计}
+  主损失：时域全局相对 L2（整批聚合，denominator clamp）
+  \begin{equation*}
+    \mathcal{L}(\hat y, y)=\frac{\lVert \hat y-y\rVert_2}{\lVert y\rVert_2}
+    \qquad\text{Parseval：等价于均匀加权谱域相对 L2}
+  \end{equation*}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \textbf{谱域/频带尝试（全部弃用）}
+      \begin{itemize}
+        \item SpectralRelativeL2：rfft 域绝对能量加权 \con{每配置均失败}
+        \item BandRelativeL2：逐频带按自身目标能量归一
+        \item FNO 侧 E16：band\_rl2 b8 训练 \con{学高频忘低频}（低频梯度被淹没，杀）
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \textbf{最终选择}
+      \begin{itemize}
+        \item FNO 与 M6 同用 \pos{relative\_l2}
+        \item \pos{时域全局最简、与官方评估口径一致}
+        \item 优点：无频带超参、对能量分布不敏感、直接对齐硬门指标
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+%-----------------------------------------------------------
+\begin{frame}{M6 纯谱模型（五）：结果——硬门达成}
+  \begin{table}
+    \centering
+    \begin{tabular}{lcc}
+      \toprule
+      seed & test.relative\_l2 & 余量（$\le 10^{-4}$ 门） \\
+      \midrule
+      20260810 & 2.838e-6 & 35.2$\times$ \\
+      20260811 & 3.407e-6 & 29.3$\times$ \\
+      20260812 & 4.874e-6 & 20.5$\times$ \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+  \begin{itemize}
+    \item \HL{3/3 seeds 全 $\le 10^{-4}$：硬门 PASS（零注入，纯 SGD 训练）}
+    \item 对照：F5 解析注入（零训练）3.078e-6 同量级；M5 FNO 极限 1.85885e-4 差 40$\times$
+    \item 26 复参已逼近闭式天花板（REF-B 闭式共享映射 4.59e-7）
+  \end{itemize}
+\end{frame}
+
+%-----------------------------------------------------------
+\begin{frame}{8ch 变体（一）：官方问题定义与最小可表达结构}
+  \begin{block}{8ch = 官方 recommended\_problem（force + encoder\_displacement → disturbance）}
+    head 已解释 99.85\% 能量（不预测残差时 test rl2 = 1.526e-3 = $\lVert rr\rVert/\lVert dist\rVert$）；
+    残差 $rr$ 为输入全谱的\textbf{跨频段线性函数}（投影 train R$^2$=0.9994，f64 真数值秩 2339/3232）；
+    用户裁决：\con{闭式 Tikhonov 9.42e-5 达标但拒收}，必须\pos{纯 SGD 训练}达成
+  \end{block}
+  \begin{table}
+    \centering
+    \small
+    \begin{tabular}{llc}
+      \toprule
+      结构（闭式扫描，test rl2） & 结果 & 判定 \\
+      \midrule
+      per-bin 独立（无跨频） & 1.526e-3 & \con{跨频必要} \\
+      Toeplitz 共享核 K=2..50 & 1.52e-3 $\to$ 0.49 & \con{平移不变假设错误} \\
+      输出侧低秩（秩 512） & 5.01e-4 & \con{不可低秩压缩} \\
+      输入侧 PCA d=1280 + ridge & \HL{9.480689e-05} & \HL{最小可表达结构} \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+  \begin{itemize}
+    \item 机理：低频输出 bin 权重局部化、高频尾（rr 能量 17.6\%）权重宽谱——共享核无法同时服务
+    \item d=1280 全连接：1.285M 参数（满空间 3.24M 的 99.4\% 性能恢复）
+  \end{itemize}
+\end{frame}
+
+%-----------------------------------------------------------
+\begin{frame}{8ch 变体（二）：SGD 达标配方与结果}
+  \begin{table}
+    \centering
+    \footnotesize
+    \begin{tabular}{ll}
+      \toprule
+      成分 & 取值 \\
+      \midrule
+      特征 & rfft bins 0-100（16ch）$\to$ 列 std $\to$ 固定 PCA 投影 $V[:1280]$ \\
+      模型 & Linear(1280$\to$1004) \pos{零初始化}（bias=False） \\
+      优化 & \pos{SGD + momentum 0.9 + WD 1e-3} + 固定对角预条件 $P=1/(S^2+\lambda)$ + float64 \\
+      成本 & GPU 4090，400 步 $\approx$ 1\,min/seed（step 100 已达门） \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+  \begin{block}{\small 预条件 = M6 白化 $W=C^{-1/2}$ 的同构推广（train 谱统计，冻结 buffer）}
+    \small 正定预条件不改变不动点：SGD+WD 固定点与闭式 Tikhonov \pos{代数同解}；
+    裸 SGD 谱跨 5 量级 $\Rightarrow$ 条件数灾难（m67h SGD 失败根因）
+  \end{block}
+  \begin{table}
+    \centering
+    \footnotesize
+    \begin{tabular}{lccc}
+      \toprule
+      seed & train rl2 & val rl2 & test rl2 \\
+      \midrule
+      20260810 / 12345 / 98765 & 5.658941e-05 & 1.638785e-04 & \HL{9.480689e-05（余量 5.4\%）} \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+  \begin{itemize}
+    \item \HL{3/3 seeds $\le 10^{-4}$：纯 SGD 硬门 PASS（凸问题唯一解，逐位一致）}
+    \item 对照：LBFGS 无正则 1.055e-4 未达 = \con{目标错误（过拟合）}；
+      闭式 vs SGD 差 0.6\%（d=1280 截断）——\pos{小结构 + 白化预条件 + 纯 SGD}
+  \end{itemize}
+\end{frame}
+
+%-----------------------------------------------------------
+\begin{frame}{对比总结}
+  \begin{table}
+    \centering
+    \small
+    \begin{tabular}{lcc}
+      \toprule
+      维度 & 最佳 FNO（M5-3） & M6 纯谱 \\
+      \midrule
+      模型类 & 非线性神经算子 + LTI 精修头 & 频域复线性共享映射 \\
+      参数量 & $\sim$214 万复参 & \pos{26 复参} \\
+      非线性 & GELU & 无 \\
+      优化器 & AdamW 链式微调 + 闭式精修 & \pos{纯 SGD + momentum} \\
+      最优 test rl2 & 1.85885e-4 & \HL{2.84e-6 -- 4.87e-6} \\
+      硬门 $10^{-4}$ & \con{未达（1.86$\times$）} & \HL{PASS（20.5$\times$ 余量）} \\
+      成本 & 5 跳 $\times$ 1200\,ep（GPU） & \pos{120\,ep CPU $\approx$ 3.2\,min} \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+  \begin{itemize}
+    \item 结论：瓶颈在优化条件与模型类，非"学习路线不可达"——\HL{跳出 FNO 空间后纯训练达门}
+  \end{itemize}
+\end{frame}
+
+%-----------------------------------------------------------
+\begin{frame}{来源}
+  \begin{itemize}
+    \item 数据集：\texttt{neural\_operator\_2 / neural\_operator\_3}（\texttt{dataset\_manifest.json}，schema 2.0 / 3.0）
+    \item 代码：\texttt{src/models/fno.py}（FNO1d、RefinedFNO1d）、\texttt{src/models/spectral.py}（SpectralMap）、\texttt{scripts/analysis/spectral\_whiten.py}、\texttt{src/training/}、\texttt{configs/m61\_spectral.yaml}
+    \item 战役档案：\texttt{OPTIMIZATION\_REPORT.md} §8（E 系列链式微调）/ §10（M5）/ §11（M6）/ §12（8ch：§12.4 闭式、§12.5 SGD 达标）
+    \item 8ch 管线记录：\texttt{experiments/analysis/2026-08-26/8ch-nonlinear-campaign.md}（结构扫描 §8）；
+      脚本 \texttt{scripts/analysis/train\_sgd\_pca.py}、\texttt{diag\_tikhonov\_structure.py}、
+      \texttt{diag\_structure\_feasibility.py}、\texttt{diag\_sgd\_pca\_verify.py}
+    \item 项目规范：\texttt{CLAUDE.md}（数据体系、评估协议、已知差异）
+  \end{itemize}
+\end{frame}
+
+\end{document}
