@@ -1,4 +1,4 @@
-"""Configuration loading, validation, and acceptance run-directory resolution."""
+"""Configuration loading, validation, and test run-directory resolution."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from typing import Any, Dict, Mapping, MutableMapping, Optional
 Config = Dict[str, Any]
 
 RUN_ROOT = "runs"
-RUN_PREFIX = "acceptance_"
+RUN_PREFIX = "test_"
 
 _REQUIRED_SECTIONS = (
     "data",
@@ -138,12 +138,12 @@ def save_resolved_config(config: Mapping[str, Any], path: Path) -> None:
 def resolve_run_dir(
     config: Mapping[str, Any], run_dir: Optional[Path] = None
 ) -> Path:
-    """Return the acceptance run directory, creating it when necessary.
+    """Return the test run directory, creating it when necessary.
 
     An explicit ``run_dir`` (or ``experiment.run_dir`` in the config) is used
     verbatim, so the runbook can create the directory once and have every step
     fill the same place.  Otherwise a fresh, collision-safe
-    ``runs/acceptance_<timestamp>`` is created.
+    ``runs/test_<timestamp>`` is created.
     """
     explicit = run_dir if run_dir is not None else config["experiment"].get("run_dir")
     if explicit:

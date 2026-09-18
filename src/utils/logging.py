@@ -2,7 +2,7 @@
 
 Every record is appended to ``train.log`` (JSON lines) and the per-epoch metric
 table to ``metrics.csv``.  Nothing is printed here: the terminal belongs to the
-callers, which emit the acceptance-facing blocks.
+callers, which emit the test-facing blocks.
 """
 
 from __future__ import annotations

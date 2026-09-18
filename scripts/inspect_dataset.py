@@ -1,18 +1,19 @@
-"""Acceptance STEP 1: print and optionally save the frozen dataset summary.
+"""Test STEP 1: print and optionally save the frozen dataset summary.
 
 Reads ``dataset_manifest.json`` only -- no sample is opened, and no training
 dependency is imported, so this is instant.
 
 The summary deliberately reports structure, counts and the time grid, and not
 the frozen physical model parameters (mover mass and inertia, actuator mapping
-``B``, encoder matrix ``H``): the acceptance session shows this output on
-screen.  Those values remain in the stored manifest and in every sample's
-``/metadata`` group, neither of which this command prints.
+``B``, encoder matrix ``H``): this command is normally run in a terminal that
+may be shared, so it keeps those values out of its output.  They remain in the
+stored manifest and in every sample's ``/metadata`` group, neither of which
+this command prints.
 
 Usage:
-    python scripts/inspect_dataset.py --config configs/acceptance.yaml
-    python scripts/inspect_dataset.py --config configs/acceptance.yaml \
-        --run-dir runs/acceptance_20260918-120000
+    python scripts/inspect_dataset.py --config configs/test.yaml
+    python scripts/inspect_dataset.py --config configs/test.yaml \
+        --run-dir runs/test_20260918-120000
 """
 
 from __future__ import annotations
@@ -34,7 +35,7 @@ SPLIT_LABELS = (("train", "Train"), ("val", "Validation"), ("test", "Test"))
 
 
 def dataset_summary(root: Path) -> Dict[str, Any]:
-    """Collect the acceptance-facing dataset facts from the manifest."""
+    """Collect the test-facing dataset facts from the manifest."""
     manifest_path = root / "dataset_manifest.json"
     if not manifest_path.is_file():
         raise FileNotFoundError(f"No dataset manifest at {manifest_path}")
@@ -86,7 +87,7 @@ def format_summary(summary: Dict[str, Any]) -> str:
     target = summary["target_channels"]
     splits = summary["splits"]
     lines = [
-        "Frozen acceptance dataset",
+        "Frozen test dataset",
         f"  Dataset             : {summary['dataset']}",
         f"  Path                : {summary['path']}",
         f"  Manifest schema     : {summary['manifest_schema']}",
@@ -111,13 +112,13 @@ def format_summary(summary: Dict[str, Any]) -> str:
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", type=Path, default=Path("configs/acceptance.yaml"))
+    parser.add_argument("--config", type=Path, default=Path("configs/test.yaml"))
     parser.add_argument("--data-root", type=Path, default=None)
     parser.add_argument(
         "--run-dir",
         type=Path,
         default=None,
-        help="acceptance run directory; writes dataset_summary.json into it",
+        help="test run directory; writes dataset_summary.json into it",
     )
     return parser.parse_args(argv)
 

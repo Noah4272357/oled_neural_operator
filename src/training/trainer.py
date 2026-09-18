@@ -1,8 +1,8 @@
 """Gradient training, validation, scheduling, and best-checkpoint selection.
 
-The acceptance pipeline trains once, from a fresh initialization, and never
+The test pipeline trains once, from a fresh initialization, and never
 resumes: there is no resume path here by design.  Terminal output is one
-compact block per epoch so the acceptance session can read it on screen.
+compact block per epoch, so a run is readable straight from the terminal.
 """
 
 from __future__ import annotations
@@ -123,9 +123,9 @@ class Trainer:
                     self.model, self.loaders["val"], self.criterion, self.device
                 )
                 last_validation = dict(validation_metrics)
-                # The acceptance recipe trains on MSE and selects the best
+                # The test recipe trains on MSE and selects the best
                 # checkpoint by validation MSE; ``relative_l2`` is reported
-                # alongside it and is the acceptance metric itself.
+                # alongside it and is the test metric itself.
                 selection_metric = loss_name if loss_name in validation_metrics else "relative_l2"
                 score = float(validation_metrics[selection_metric])
                 if score < best_score:

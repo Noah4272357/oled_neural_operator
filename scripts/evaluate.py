@@ -1,4 +1,4 @@
-"""Acceptance STEP 5: evaluate the best checkpoint on the full test split.
+"""Test STEP 5: evaluate the best checkpoint on the full test split.
 
 Runs every test sample, at every retained time point, on both target channels,
 and reports the **global** relative L2
@@ -19,7 +19,7 @@ Two values are recorded, because they differ and the difference is documented:
 ``pass`` requires **both** to be below the threshold.
 
 Usage:
-    python scripts/evaluate.py --run-dir runs/acceptance_20260918-120000
+    python scripts/evaluate.py --run-dir runs/test_20260918-120000
 """
 
 from __future__ import annotations
@@ -113,7 +113,7 @@ def main(argv: Optional[list[str]] = None) -> Dict[str, Any]:
     threshold = (
         args.threshold
         if args.threshold is not None
-        else float(config.get("acceptance", {}).get("threshold", DEFAULT_THRESHOLD))
+        else float(config.get("test", {}).get("threshold", DEFAULT_THRESHOLD))
     )
 
     device = select_device(args.device)
@@ -205,7 +205,7 @@ def main(argv: Optional[list[str]] = None) -> Dict[str, Any]:
                 "   (official, float32 accumulation)",
                 f"  GLOBAL RELATIVE L2  : {result['relative_l2_float64']:.7e}"
                 "   (float64 direct recomputation)",
-                f"  ACCEPTANCE LIMIT    : {threshold:.6e}",
+                f"  TEST THRESHOLD      : {threshold:.6e}",
                 f"  RESULT              : {'PASS' if result['pass'] else 'FAIL'}",
             ]
         ),

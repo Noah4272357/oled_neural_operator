@@ -1,14 +1,14 @@
-"""Acceptance STEP 4: train the surrogate from a fresh initialization.
+"""Test STEP 4: train the surrogate from a fresh initialization.
 
 Loads the train-only basis produced by ``scripts/fit_basis.py`` from the run
 directory, initializes a new model, and runs gradient descent (SGD) with
 periodic validation.  The best checkpoint is selected by validation.
 
-There is no resume path: the acceptance run always starts from scratch.
+There is no resume path: the test run always starts from scratch.
 
 Usage:
-    python scripts/train.py --config configs/acceptance.yaml \
-        --run-dir runs/acceptance_20260918-120000
+    python scripts/train.py --config configs/test.yaml \
+        --run-dir runs/test_20260918-120000
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ from src.utils.logging import RunLogger  # noqa: E402
 from src.utils.paths import apply_data_root  # noqa: E402
 from src.utils.seed import set_seed  # noqa: E402
 
-DEFAULT_CONFIG = Path("configs/acceptance.yaml")
+DEFAULT_CONFIG = Path("configs/test.yaml")
 
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
@@ -123,7 +123,7 @@ def main(argv: Optional[list[str]] = None) -> Dict[str, Any]:
     print(
         "\n".join(
             [
-                "Acceptance training run",
+                "Test training run",
                 f"  Run directory       : {run_dir}",
                 f"  Dataset             : {config['data']['root']}",
                 f"  Device              : {device}",
@@ -156,7 +156,7 @@ def main(argv: Optional[list[str]] = None) -> Dict[str, Any]:
                     f"  {config['data']['batch_size']}-sample batch: MSE averages over the",
                     "  batch, so the loss Hessian scales as 1/numel. On a small",
                     "  subset the canonical lr will diverge. This mode is for",
-                    "  wiring checks only, not for an acceptance result.",
+                    "  wiring checks only, not for a test result.",
                     "",
                 ]
             ),

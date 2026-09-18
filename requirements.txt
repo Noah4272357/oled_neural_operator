@@ -2,8 +2,8 @@
 # Install into a project-local venv only — never into system/user site-packages:
 #   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 #
-# The acceptance baseline is CPU. Do not swap in a CUDA torch wheel for the
-# acceptance run; the canonical path and the recorded result are CPU.
+# The test baseline is CPU. Do not swap in a CUDA torch wheel for the
+# test run; the canonical path and the recorded result are CPU.
 
 # Model training / inference. 2.x line; pins upper bound at <2.6 to stay on
 # wheels compatible with the project's CUDA build history.
@@ -16,9 +16,9 @@ numpy>=1.24.0,<3.0.0
 # HDF5 dataset access (one .h5 per simulation, lazy per-sample open).
 h5py>=3.9.0
 
-# Acceptance figures (scripts/report.py). Headless Agg backend.
+# Test figures (scripts/report.py). Headless Agg backend.
 matplotlib>=3.7,<4.0
 
-# Optional: pretty-print of config files. configs/acceptance.yaml is
+# Optional: pretty-print of config files. configs/test.yaml is
 # deliberately JSON-compatible, so the pipeline runs without PyYAML.
 # pyyaml>=6.0

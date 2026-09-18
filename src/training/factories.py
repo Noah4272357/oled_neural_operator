@@ -1,7 +1,7 @@
-"""Optimization components for the acceptance pipeline.
+"""Optimization components for the test pipeline.
 
 One final recipe: plain SGD on the whitened quadratic, cosine-annealed over the
-run.  Nothing here is selected at run time beyond what the acceptance config
+run.  Nothing here is selected at run time beyond what the test config
 sets, so the components are built directly rather than looked up in a registry
 of abandoned alternatives.
 """

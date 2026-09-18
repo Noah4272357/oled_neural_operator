@@ -1,22 +1,22 @@
 {
   "_comment": [
-    "Final acceptance configuration. JSON-compatible YAML so that no YAML",
+    "Final test configuration. JSON-compatible YAML so that no YAML",
     "parser is required. The only supported model is spectral_dense; the basis",
     "path is supplied by the run directory (scripts/fit_basis.py writes it,",
     "scripts/train.py reads it), so it is deliberately absent here.",
     "",
-    "data.root is the canonical acceptance dataset on this server; override it",
+    "data.root is the canonical test dataset on this server; override it",
     "with --data-root or the DATA_ROOT environment variable to run elsewhere.",
     "",
-    "device is cpu: the canonical acceptance path is CPU, and the recorded",
+    "device is cpu: the canonical test path is CPU, and the recorded",
     "result was produced on CPU. --device cuda/auto are available but are not",
-    "the acceptance baseline, and the surrogate venv carries a CPU-only torch",
+    "the test baseline, and the surrogate venv carries a CPU-only torch",
     "wheel, so cuda is not presently selectable here."
   ],
 
   "seed": 20260810,
   "device": "cpu",
-  "acceptance": { "threshold": 1.0e-4 },
+  "test": { "threshold": 1.0e-4 },
 
   "data": {
     "root": "/nishome/charliewang/data/oled_microstage_inverse_disturbance",

@@ -1,11 +1,11 @@
-"""Acceptance STEP 6/7: turn a finished run directory into figures.
+"""Test STEP 6/7: turn a finished run directory into figures.
 
 Consumes ``history.json`` and ``predictions.npz`` from the run directory and
 writes:
 
     figures/training_curve.png          training metric vs epoch
     figures/validation_curve.png        validation relative L2 vs epoch,
-                                        with the 1e-4 acceptance limit drawn
+                                        with the 1e-4 test threshold drawn
     figures/prediction_sample_00{1,2,3}.png   Fx and Fy, truth vs prediction
     figures/error_sample_00{1,2,3}.png        residual time series
 
@@ -16,7 +16,7 @@ position and were never selected by looking at the errors -- no cherry-picking.
 No notebook, no dashboard, no web app.
 
 Usage:
-    python scripts/report.py --run-dir runs/acceptance_20260918-120000
+    python scripts/report.py --run-dir runs/test_20260918-120000
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 
-ACCEPTANCE_THRESHOLD = 1.0e-4
+TEST_THRESHOLD = 1.0e-4
 # Fixed by position in the test split: first, middle, last.
 EXAMPLE_INDICES: Tuple[int, ...] = (0, 100, 199)
 CHANNEL_LABELS = ("Fx", "Fy")
@@ -80,8 +80,8 @@ def plot_validation_curve(series: Dict[str, List[float]], path: Path) -> None:
     figure, axes = plt.subplots(figsize=(7.5, 4.5))
     axes.semilogy(series["val_epochs"], series["val_rl2"], "o-", color="#2ca02c",
                   markersize=4, label="validation global relative L2")
-    axes.axhline(ACCEPTANCE_THRESHOLD, color="#d62728", linestyle="--",
-                 label=f"acceptance limit {ACCEPTANCE_THRESHOLD:g}")
+    axes.axhline(TEST_THRESHOLD, color="#d62728", linestyle="--",
+                 label=f"test threshold {TEST_THRESHOLD:g}")
     axes.set_xlabel("epoch")
     axes.set_ylabel("relative L2 (log scale)")
     axes.set_title("Validation curve")

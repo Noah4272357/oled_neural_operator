@@ -1,4 +1,4 @@
-"""Model construction for the acceptance pipeline.
+"""Model construction for the test pipeline.
 
 One architecture: the dense cross-frequency spectral map.  The factory exists
 so that the training and evaluation entry points stay free of model wiring and

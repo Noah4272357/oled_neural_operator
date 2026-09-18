@@ -1,4 +1,4 @@
-"""Acceptance STEP 3: fit the train-only spectral basis (whitening statistics).
+"""Test STEP 3: fit the train-only spectral basis (whitening statistics).
 
 Computes, from the **train split only**:
 
@@ -21,8 +21,8 @@ effectively unoptimizable by a first-order method.
 The validation and test splits are never opened here.
 
 Usage:
-    python scripts/fit_basis.py --config configs/acceptance.yaml \
-        --run-dir runs/acceptance_20260918-120000
+    python scripts/fit_basis.py --config configs/test.yaml \
+        --run-dir runs/test_20260918-120000
 """
 
 from __future__ import annotations
@@ -95,10 +95,10 @@ def targets(y: torch.Tensor) -> torch.Tensor:
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", type=Path, default=Path("configs/acceptance.yaml"))
+    parser.add_argument("--config", type=Path, default=Path("configs/test.yaml"))
     parser.add_argument("--data-root", type=Path, default=None)
     parser.add_argument("--run-dir", type=Path, default=None,
-                        help="acceptance run directory (default: the config's)")
+                        help="test run directory (default: the config's)")
     parser.add_argument("--output", type=Path, default=None,
                         help="override the basis path (default <run-dir>/spectral_basis.pt)")
     parser.add_argument("--d", type=int, default=256,

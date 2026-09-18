@@ -1,7 +1,7 @@
-"""Acceptance STEP 0: print and save the execution environment record.
+"""Test STEP 0: print and save the execution environment record.
 
 Writes ``environment.json`` (machine-readable) and ``environment.txt``
-(human-readable) into the acceptance run directory, and prints a concise table
+(human-readable) into the test run directory, and prints a concise table
 to the terminal.
 
 No credentials are collected: no IP or MAC address, no SSH material, no tokens,
@@ -14,7 +14,7 @@ and SciPy, while surrogate training needs PyTorch and is CPU-only on this
 server.  Nothing here implies GPU execution of the surrogate.
 
 Usage:
-    python scripts/show_environment.py --run-dir runs/acceptance_20260918-120000
+    python scripts/show_environment.py --run-dir runs/test_20260918-120000
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ from src.utils.config import load_config  # noqa: E402
 from src.utils.paths import apply_data_root  # noqa: E402
 
 DEFAULT_SIMULATION_REPO = Path("/nishome/charliewang/forge-projects/oled-microstage-simulation")
-DEFAULT_CONFIG = Path("configs/acceptance.yaml")
+DEFAULT_CONFIG = Path("configs/test.yaml")
 
 
 def _run(command: List[str], timeout: int = 20) -> Optional[str]:
@@ -261,7 +261,7 @@ def format_report(env: Dict[str, Any]) -> str:
         f"  Canonical device    : {code['canonical_device']}",
         "",
         "NOTE: the surrogate is trained on CPU; the GPUs above are reported as",
-        "present hardware and are not used by the acceptance pipeline.",
+        "present hardware and are not used by the test pipeline.",
     ]
     return "\n".join(lines)
 

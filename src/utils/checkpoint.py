@@ -3,7 +3,7 @@
 A checkpoint is self-describing: it carries the resolved config that produced
 it, so ``scripts/evaluate.py`` can rebuild the exact model and data pipeline
 without being told anything but the file path.  There is no resume machinery --
-the acceptance pipeline always trains from a fresh initialization.
+the test pipeline always trains from a fresh initialization.
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ def load_checkpoint(path: Path, map_location: Any = "cpu") -> Dict[str, Any]:
     JSON-compatible config mapping, so unpickling cannot execute code from the
     file.  Historical campaign checkpoints (``format_version`` 2) additionally
     carried pickled RNG state and are not readable this way -- they are not
-    part of the acceptance pipeline.
+    part of the test pipeline.
     """
     return torch.load(path, map_location=map_location, weights_only=True)
 

@@ -1,4 +1,4 @@
-"""End-to-end acceptance smoke test on a synthetic miniature dataset.
+"""End-to-end pipeline smoke test on a synthetic miniature dataset.
 
 Exercises the whole formal flow at toy scale -- dataset -> train-only basis ->
 model -> backward -> SGD step -> validation -> test evaluation -> run
@@ -24,7 +24,7 @@ import h5py
 import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-ACCEPTANCE_CONFIG = PROJECT_ROOT / "configs" / "acceptance.yaml"
+TEST_CONFIG = PROJECT_ROOT / "configs" / "test.yaml"
 SCRIPTS = PROJECT_ROOT / "scripts"
 
 # Long enough that the default --f-in 100 stays inside the available spectrum
@@ -109,7 +109,7 @@ def build_dataset(root: Path) -> Path:
     return root
 
 
-class AcceptanceSmokeTest(unittest.TestCase):
+class PipelineSmokeTest(unittest.TestCase):
     """dataset -> basis -> train -> evaluate -> report, at toy scale."""
 
     @classmethod
@@ -117,9 +117,9 @@ class AcceptanceSmokeTest(unittest.TestCase):
         cls._tmp = tempfile.TemporaryDirectory()
         base = Path(cls._tmp.name)
         cls.dataset_root = build_dataset(base / "dataset")
-        cls.run_dir = base / "runs" / "acceptance_smoke"
+        cls.run_dir = base / "runs" / "test_smoke"
 
-        config = json.loads(ACCEPTANCE_CONFIG.read_text(encoding="utf-8"))
+        config = json.loads(TEST_CONFIG.read_text(encoding="utf-8"))
         config["data"]["root"] = str(cls.dataset_root)
         config["data"]["max_train_samples"] = SPLITS["train"]
         config["data"]["max_val_samples"] = SPLITS["val"]
@@ -135,7 +135,7 @@ class AcceptanceSmokeTest(unittest.TestCase):
         config["optimizer"]["lr"] = 100.0
         config["scheduler"]["eta_min"] = 0.0
         config["experiment"]["run_dir"] = str(cls.run_dir)
-        cls.config_path = base / "acceptance_tiny.yaml"
+        cls.config_path = base / "test_tiny.yaml"
         cls.config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
 
         cls.basis_result = load_script("fit_basis").main(
