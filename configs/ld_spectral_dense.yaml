@@ -1,0 +1,51 @@
+{
+  "seed": 20260810,
+  "device": "cpu",
+  "data": {
+    "root": "~/data/neural_operator_3",
+    "input_fields": ["force", "encoder_displacement"],
+    "target_fields": ["disturbance"],
+    "time_start": 0,
+    "time_stop": null,
+    "time_stride": 1,
+    "preprocessing": {"name": "diff_features", "dt": 0.001, "channels": [4, 5, 6, 7]},
+    "dtype": "float64",
+    "transform_dtype": "float64",
+    "memory_cache": true,
+    "batch_size": 5000,
+    "eval_batch_size": 128,
+    "num_workers": 0,
+    "max_train_samples": null,
+    "max_val_samples": null,
+    "max_test_samples": null
+  },
+  "model": {
+    "name": "spectral_dense",
+    "basis_path": "outputs/spectral_basis/basis_16ch_f64_d256.pt",
+    "init_scale": 0.001,
+    "embed_dim": 64,
+    "modes": 128,
+    "width": 128,
+    "lift_dim": 64,
+    "num_blocks": 1
+  },
+  "loss": {"name": "mse"},
+  "optimizer": {"name": "sgd", "lr": 268400.0, "weight_decay": 0.0, "momentum": 0.0},
+  "scheduler": {"name": "cosine", "eta_min": 0.0},
+  "training": {
+    "epochs": 100,
+    "validate_every": 5,
+    "grad_clip": 0.0,
+    "keep_resume_learning_rate": false,
+    "amp": "none",
+    "compile": false
+  },
+  "checkpoint": {"save_best": true, "save_last": true},
+  "experiment": {
+    "root_dir": "experiments",
+    "run_name": null,
+    "output_dir": null,
+    "overwrite": true,
+    "save": true
+  }
+}
