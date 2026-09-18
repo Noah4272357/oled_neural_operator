@@ -61,12 +61,16 @@ class GridAdapter(nn.Module):
 
     Casts inputs to the model's dtype (float64 when the spectral map is
     complex128), so official-metric evaluation matches the trained dtype.
-    The grid argument is ignored.
+    The grid argument is ignored.  ``in_dtype`` overrides the inference for
+    real-parameter models that still need float64 inputs.
     """
 
-    def __init__(self, model: nn.Module) -> None:
+    def __init__(self, model: nn.Module, in_dtype: torch.dtype | None = None) -> None:
         super().__init__()
         self.model = model
+        if in_dtype is not None:
+            self.in_dtype = in_dtype
+            return
         parameter = next(model.parameters())
         self.in_dtype = (
             torch.float64 if parameter.dtype == torch.cdouble else torch.float32

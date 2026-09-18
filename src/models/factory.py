@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+import torch
 import torch.nn as nn
 
 from .fno import FNO1d, RefinedFNO1d
 from .spectral import GridAdapter, SpectralMap
+from .spectral_dense import SpectralDenseMap
 
 
 def build_model(
@@ -25,6 +27,22 @@ def build_model(
                 out_channels=target_channels,
                 whiten_path=str(config["whiten_path"]),
             )
+        )
+    if name == "spectral_dense":
+        # Dense cross-frequency map on the flattened spectrum.  Class ceilings
+        # (16ch float64, same conditions): shared 1.0e-02, per-bin on a
+        # truncated spectrum 1.4e-03, per-bin full spectrum 2.5e-05, dense
+        # 5.2e-08.  The per-bin class does clear 1e-4 given the full spectrum;
+        # the dense class wins by ~470x on the boundary correction.
+        # in_dtype is explicit: W is real, so GridAdapter cannot infer it.
+        return GridAdapter(
+            SpectralDenseMap(
+                in_channels=input_channels,
+                out_channels=target_channels,
+                basis_path=str(config["basis_path"]),
+                init_scale=float(config.get("init_scale", 1e-3)),
+            ),
+            in_dtype=torch.float64,
         )
     common = dict(
         in_channels=input_channels + 1,
