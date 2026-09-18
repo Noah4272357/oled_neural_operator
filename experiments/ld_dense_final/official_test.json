@@ -1,0 +1,12 @@
+{
+  "checkpoint": "experiments/ld_dense_final/best_model.pt",
+  "checkpoint_epoch": 100,
+  "split": "test",
+  "samples": 200,
+  "metrics": {
+    "mse": 1.1659823694267896e-14,
+    "rmse": 1.0798066352022429e-07,
+    "relative_l2": 5.940277290056465e-08,
+    "seconds": 0.028396999463438988
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "checkpoint": "experiments/lnn_fno16ch_gelu_final/best_model.pt",
+  "checkpoint_epoch": 300,
+  "split": "test",
+  "samples": 200,
+  "metrics": {
+    "mse": 2.772189423947515e-05,
+    "rmse": 0.005265158519880969,
+    "relative_l2": 0.0028964909609337864,
+    "seconds": 0.1922877561300993
+  }
+}
