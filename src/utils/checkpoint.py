@@ -1,25 +1,18 @@
-"""Backward-compatible checkpoint serialization and restoration."""
+"""Checkpoint serialization.
+
+A checkpoint is self-describing: it carries the resolved config that produced
+it, so ``scripts/evaluate.py`` can rebuild the exact model and data pipeline
+without being told anything but the file path.  There is no resume machinery --
+the acceptance pipeline always trains from a fresh initialization.
+"""
 
 from __future__ import annotations
 
-import random
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, Mapping
 
-import numpy as np
 import torch
 from torch.optim import Optimizer
-
-
-def _rng_state() -> Dict[str, Any]:
-    state: Dict[str, Any] = {
-        "python": random.getstate(),
-        "numpy": np.random.get_state(),
-        "torch": torch.get_rng_state(),
-    }
-    if torch.cuda.is_available():
-        state["cuda"] = torch.cuda.get_rng_state_all()
-    return state
 
 
 def save_checkpoint(
@@ -32,11 +25,10 @@ def save_checkpoint(
     validation: Mapping[str, float],
     best_metric: float,
     config: Mapping[str, Any],
-    legacy_arguments: Mapping[str, Any],
 ) -> None:
     torch.save(
         {
-            "format_version": 2,
+            "format_version": 3,
             "epoch": epoch,
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
@@ -44,24 +36,26 @@ def save_checkpoint(
             "validation": dict(validation),
             "best_metric": best_metric,
             "config": dict(config),
-            # Preserve the key consumed by the existing evaluation programs.
-            "args": dict(legacy_arguments),
-            "rng_state": _rng_state(),
         },
         path,
     )
 
 
 def load_checkpoint(path: Path, map_location: Any = "cpu") -> Dict[str, Any]:
-    return torch.load(path, map_location=map_location, weights_only=False)
+    """Load a checkpoint.
+
+    ``weights_only=True`` is safe here and is the default for this pipeline:
+    a checkpoint holds only tensors, numpy-free primitives and the
+    JSON-compatible config mapping, so unpickling cannot execute code from the
+    file.  Historical campaign checkpoints (``format_version`` 2) additionally
+    carried pickled RNG state and are not readable this way -- they are not
+    part of the acceptance pipeline.
+    """
+    return torch.load(path, map_location=map_location, weights_only=True)
 
 
-def restore_training_state(
-    checkpoint: Mapping[str, Any],
-    model: torch.nn.Module,
-    optimizer: Optional[Optimizer] = None,
-) -> int:
-    model.load_state_dict(checkpoint["model_state_dict"])
-    if optimizer is not None and checkpoint.get("optimizer_state_dict") is not None:
-        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-    return int(checkpoint["epoch"])
+def load_model_state(checkpoint: Mapping[str, Any]) -> Dict[str, Any]:
+    state = checkpoint.get("model_state_dict")
+    if state is None:
+        raise ValueError("Checkpoint has no 'model_state_dict'; it is not a model checkpoint.")
+    return dict(state)

@@ -1,7 +1,6 @@
-"""Neural-operator model definitions and factories."""
+"""Model definitions and construction."""
 
-from .fno import FNO1d
+from .factory import SUPPORTED_MODELS, build_model
+from .spectral_dense import GridAdapter, SpectralDenseMap
 
-from .factory import build_model
-
-__all__ = ["FNO1d", "build_model"]
+__all__ = ["GridAdapter", "SpectralDenseMap", "SUPPORTED_MODELS", "build_model"]

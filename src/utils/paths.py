@@ -22,8 +22,11 @@ from typing import MutableMapping, Optional, Union
 
 PathLike = Union[str, Path]
 
-# Default dataset directory beneath the resolved data root.
-DATASET_DIR = "neural_operator_2"
+# Default dataset directory beneath the resolved data root.  The canonical
+# acceptance dataset lives at /nishome/charliewang/data/<DATASET_DIR> on the
+# acceptance server and is named from the project, not from a version number:
+# version information is carried by the manifest itself.
+DATASET_DIR = "oled_microstage_inverse_disturbance"
 
 _warned_fallback = False
 

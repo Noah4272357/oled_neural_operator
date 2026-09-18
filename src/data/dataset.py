@@ -293,8 +293,9 @@ class OLEDNeuralOperatorDataset(Dataset):
         if self.transform is not None:
             sample = self.transform(sample)
 
-        # Grid included: ``FNO1d.forward`` concatenates it onto the inputs, and
-        # mixing dtypes there would silently promote the whole graph.
+        # The whole sample (inputs, target and grid) is cast back to the
+        # configured dtype here, so a transform that ran in float64 cannot
+        # leave the graph in mixed precision downstream.
         if self._pre_transform_dtype is not self.dtype:
             sample = _cast_tensors(sample, self.dtype)
         return sample
