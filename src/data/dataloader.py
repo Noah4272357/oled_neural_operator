@@ -15,6 +15,28 @@ from src.utils.paths import resolve_data_root
 from src.utils.seed import seed_worker
 
 
+_SPECIALISED_DTYPES = {"float32": torch.float32, "float64": torch.float64}
+
+
+def _resolve_dtype(value: Any, key: str) -> Optional[torch.dtype]:
+    """Resolve a config dtype (name or ``torch.dtype``) to a ``torch.dtype``.
+
+    Configs are JSON-compatible, so dtypes arrive as strings such as
+    ``"float64"``; tests and analysis scripts may pass the object directly.
+    """
+    if value is None:
+        return None
+    if isinstance(value, torch.dtype):
+        return value
+    try:
+        return _SPECIALISED_DTYPES[str(value).lower()]
+    except KeyError:
+        raise ValueError(
+            f"Unsupported {key}={value!r}; expected one of "
+            f"{sorted(_SPECIALISED_DTYPES)}."
+        ) from None
+
+
 def _limited(dataset: Dataset, maximum: Optional[int]) -> Dataset:
     if maximum is None:
         return dataset
@@ -40,6 +62,11 @@ def build_dataloaders(config: Mapping[str, Any], seed: int) -> Dict[str, DataLoa
         time_stride=config["time_stride"],
         include_metadata=False,
         transform=transform,
+        # Absent key must fall back to the dataset default rather than None.
+        dtype=_resolve_dtype(config.get("dtype"), "data.dtype") or torch.float32,
+        transform_dtype=_resolve_dtype(
+            config.get("transform_dtype"), "data.transform_dtype"
+        ),
     )
     required = {"train", "val", "test"}
     missing = required.difference(datasets)

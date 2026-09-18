@@ -49,6 +49,23 @@ DEFAULT_TARGET_FIELDS: Tuple[str, ...] = (
 )
 
 
+def _cast_tensors(value: Any, dtype: torch.dtype) -> Any:
+    """Cast every tensor reachable from ``value`` to ``dtype``.
+
+    Walks dictionaries, lists, and tuples, which is what a sample dictionary
+    and its metadata contain.  Dicts are updated in place; lists, tuples, and
+    tensors are replaced, so callers must use the returned value.
+    """
+    if isinstance(value, torch.Tensor):
+        return value.to(dtype)
+    if isinstance(value, dict):
+        for key, item in value.items():
+            value[key] = _cast_tensors(item, dtype)
+    elif isinstance(value, (list, tuple)):
+        return type(value)(_cast_tensors(item, dtype) for item in value)
+    return value
+
+
 class OLEDNeuralOperatorDataset(Dataset):
     """Lazy, worker-safe reader for one OLED dataset split.
 
@@ -63,6 +80,17 @@ class OLEDNeuralOperatorDataset(Dataset):
         dtype: Floating-point dtype returned to PyTorch.
         include_metadata: Include manifest metadata in each returned item.
         transform: Optional callable applied to the completed sample dictionary.
+        transform_dtype: Optional dtype used while the ``transform`` runs, with
+            every returned tensor cast back to ``dtype`` afterwards.  Set this
+            to ``torch.float64`` for transforms that amplify rounding, such as a
+            second difference divided by ``dt**2``: the HDF5 values are float64,
+            so downgrading before differentiating injects a quantisation floor
+            (``eps32 * |x| / dt**2``) that no later upcast can undo.  ``None``
+            (default) leaves the historical behaviour untouched.
+
+    .. note::
+        Reads happen at ``transform_dtype`` only when a ``transform`` is
+        present; otherwise ``dtype`` is used throughout.
     """
 
     VALID_SPLITS = ("train", "val", "test")
@@ -80,6 +108,7 @@ class OLEDNeuralOperatorDataset(Dataset):
         dtype: torch.dtype = torch.float32,
         include_metadata: bool = True,
         transform: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None,
+        transform_dtype: Optional[torch.dtype] = None,
     ) -> None:
         if split not in self.VALID_SPLITS:
             raise ValueError(
@@ -104,6 +133,7 @@ class OLEDNeuralOperatorDataset(Dataset):
         self.dtype = dtype
         self.include_metadata = include_metadata
         self.transform = transform
+        self.transform_dtype = transform_dtype
 
         self.manifest = self._read_manifest()
         self.records = self._records_for_split()
@@ -201,6 +231,17 @@ class OLEDNeuralOperatorDataset(Dataset):
     def __len__(self) -> int:
         return len(self.records)
 
+    @property
+    def _pre_transform_dtype(self) -> torch.dtype:
+        """Dtype used while a sample is built and transformed.
+
+        Equals ``transform_dtype`` when a transform is configured, otherwise
+        ``dtype`` — so the default configuration is unchanged.
+        """
+        if self.transform is not None and self.transform_dtype is not None:
+            return self.transform_dtype
+        return self.dtype
+
     def _read_time_fields(self, handle: h5py.File, fields: Sequence[str]) -> Tensor:
         arrays = []
         expected_length: Optional[int] = None
@@ -218,9 +259,11 @@ class OLEDNeuralOperatorDataset(Dataset):
                 raise ValueError("Selected fields do not share the same time dimension.")
             arrays.append(array)
 
-        # HDF5 values are float64; converting here halves training memory use.
+        # HDF5 values are float64. Reading at ``_pre_transform_dtype`` keeps the
+        # transform's arithmetic exact; the memory-saving cast back to ``dtype``
+        # happens in ``__getitem__`` once the transform has run.
         merged = np.ascontiguousarray(np.concatenate(arrays, axis=-1))
-        return torch.as_tensor(merged, dtype=self.dtype)
+        return torch.as_tensor(merged, dtype=self._pre_transform_dtype)
 
     def __getitem__(self, index: int) -> Dict[str, Any]:
         record = self.records[index]
@@ -231,7 +274,7 @@ class OLEDNeuralOperatorDataset(Dataset):
             grid_array = np.ascontiguousarray(
                 handle[FIELD_PATHS["time"]][self.time_slice]
             )
-            grid = torch.as_tensor(grid_array, dtype=self.dtype)
+            grid = torch.as_tensor(grid_array, dtype=self._pre_transform_dtype)
 
         if inputs.shape[0] != grid.shape[0] or targets.shape[0] != grid.shape[0]:
             raise ValueError(f"Inconsistent time dimensions in {path}")
@@ -249,6 +292,11 @@ class OLEDNeuralOperatorDataset(Dataset):
 
         if self.transform is not None:
             sample = self.transform(sample)
+
+        # Grid included: ``FNO1d.forward`` concatenates it onto the inputs, and
+        # mixing dtypes there would silently promote the whole graph.
+        if self._pre_transform_dtype is not self.dtype:
+            sample = _cast_tensors(sample, self.dtype)
         return sample
 
 
@@ -263,6 +311,7 @@ def create_datasets(
     dtype: torch.dtype = torch.float32,
     include_metadata: bool = True,
     transform: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None,
+    transform_dtype: Optional[torch.dtype] = None,
 ) -> Dict[str, OLEDNeuralOperatorDataset]:
     """Create the available train/validation/test Dataset objects."""
     common = dict(
@@ -274,6 +323,7 @@ def create_datasets(
         dtype=dtype,
         include_metadata=include_metadata,
         transform=transform,
+        transform_dtype=transform_dtype,
     )
     return {
         split: OLEDNeuralOperatorDataset(root, split, **common)
@@ -300,6 +350,7 @@ def create_dataloaders(
     dtype: torch.dtype = torch.float32,
     include_metadata: bool = True,
     transform: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None,
+    transform_dtype: Optional[torch.dtype] = None,
 ) -> Dict[str, DataLoader]:
     """Build deterministic train/validation/test DataLoaders.
 
@@ -323,6 +374,7 @@ def create_dataloaders(
         dtype=dtype,
         include_metadata=include_metadata,
         transform=transform,
+        transform_dtype=transform_dtype,
     )
     eval_batch_size = eval_batch_size or batch_size
     pin_memory = torch.cuda.is_available() if pin_memory is None else pin_memory
