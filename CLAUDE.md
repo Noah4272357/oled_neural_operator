@@ -1,7 +1,7 @@
 # oled-neural-operator
 
-> 项目状态：目标已达成 — 硬门（纯 SGD 训练 test.relative_l2 ≤ 1e-4）由 M6 纯谱模型达成：3/3 seeds ≤ 4.87e-6（最差余量 20.5×，零注入，2026-08-25）；F5 解析注入 3.078e-6 为对照记录
-> 当前阶段：性能战役收官 — M6 纯谱共享映射（26 复参，rfft→白化→M→irfft）SGD 训练达门；FNO 空间学习极限 1.86e-4（M5）与 E31 2.03e-4 已被谱空间超越；最终谱模型禁止 resume 微调（F4 证伪）
+> 项目状态：目标已达成 — **8ch 官方规格（`archive/02` §3.2.2）已达标**：`experiments/ld_dense_final/best_model.pt` 纯 SGD 训练、零解析分量，官方 test relative_l2 = **5.9403e-08**（余量 1683×，2026-09-18；⚠️ 该值是**指标自身的 float32 地板**，非模型真实误差——同一预测 float64 为 **4.6721e-08**、余量 2140×，见已知差异 8）。13ch 侧硬门由 M6 纯谱模型达成：3/3 seeds ≤ 4.87e-6（零注入，2026-08-25）；F5 解析注入 3.078e-6 为对照记录
+> 当前阶段：8ch 交付收官 — float32 量化缺陷已修复（`transform_dtype` opt-in，默认行为不变）；8ch 线性/非线性双路线按 val 选优，dense 跨频路线胜出（val 6.07e-08 vs FNO+GELU 2.75e-03）；最终谱模型禁止 resume 微调（F4 证伪）
 > 文档约定：README.md（英文规范源）/ README_zh.md（中文镜像），本文件为 AI 助手指令
 
 ## 最终目标（THE GOAL）
@@ -123,6 +123,8 @@ oled-neural-operator/
 4. **默认训练语义变更（2026-08-23 优化战役）**：默认 batch 8/lr 1e-3 → **64/2.83e-3**（sqrt LR 缩放，100-epoch 动力学验证等价，详见 OPTIMIZATION_REPORT.md）；新默认下训练的模型不与历史 500-epoch 实验（batch 8）直接可比。旧语义复现：`--batch-size 8 --learning-rate 1e-3 --amp none --no-memory-cache`。
 5. **两套达标模型并存**：F5 解析注入（`outputs/ls_init_f1/best_model.pt`，零训练 epoch 0，test rl2 = 3.078e-6，复现见下）与 M6 纯谱模型（SGD 训练，test rl2 2.84e-6–4.87e-6）均为达标产物；按用户硬门口径（必须 SGD 训练达成、零注入）以 **M6 为准**。两者均**禁止 resume 微调**（F4 证伪：AdamW lr1e-5 微调 300ep 恶化 1400×，见 ANALYSIS_REPORT.md 发现 9）。F5 复现：`python scripts/analysis/ls_init_fno.py --data-root <ROOT> --output-dir outputs/ls_init_f1 --mode analytic --modes 252`（确定性，零训练成本）。M6 复现：`experiments/analysis/2026-08-24/m6_purespectral.md` §5。
 6. **FNO 空间上限已被推翻**："纯学习路线最优 E31 = 2.03e-4（13ch 非线性 FNO，b8 lr5e-5×1200ep 链式微调）"与 M5 学习极限 1.85885e-4（OPTIMIZATION_REPORT.md §10）仅适用于 **FNO 空间**（表示能力限制：GELU 互调 + modes 截断）；M6 跳出 FNO 空间，以谱空间 26 复参 SGD 训练达 4.87e-6，"纯 SGD 不可达 1e-4"结论不成立。
+7. **float32 量化缺陷（2026-09-18 修复，opt-in）**：`_read_time_fields` 原先把 HDF5 的 float64 **先降为样本 dtype 再交给 `transform`**，使 `diff_features` / `second_derivative` 的 `÷dt² = 1e6` 放大 float32 舍入。同一模型同一 split 仅改 cast 顺序：val 1.6388e-04 → 1.9771e-05、test 9.4807e-05 → 2.0440e-05。修法为新增 `data.transform_dtype`（读入精度与输出精度解耦），**默认 `None` 时与旧行为逐位一致**，故既有脚本数值不受影响；新配置应设 `transform_dtype: "float64"`。回归测试 `tests/test_dataset_precision.py`。
+8. **8ch 达标产物与一批失效产物的声明（2026-09-18）**：8ch 官方规格的达标产物是 `experiments/ld_dense_final/best_model.pt`（`spectral_dense`，16ch `diff_features` + 固定白化 + **跨频** dense 映射，SGD lr 2.684e5 全批 100 epoch，float64；唯一可训练参数 `model.W (256×1004)`）。**同时作废**：`outputs/lti_head_16ch.pt`（在 float32 污染特征上 `pinv` 拟合，且隔离测量单独仅 1.19e-03）、`experiments/m63_residual_targets`、`outputs/sgd_pca_1280/`（含闭式 head 的复合体）及 `OPTIMIZATION_REPORT.md` §7/§8/§12 建立在它们之上的数字；旧 `basis_16ch_f64_d1280.pt` 亦作废（d=1280 在 float64 下 `‖AᵀA−I‖=0.40`）。另：`m62`/`m63` 的 FNO run 系**被中断**（停在 ep 4/9，无 `history.json`），不构成"FNO 学不动"的证据；2026-09-18 才首次完整跑满 16ch FNO（300 ep，test 2.8965e-03，仍不达标）。全链记录：`experiments/analysis/2026-09-18/ld-dense-campaign.md`。**报告精度声明**：官方 test 5.9403e-08 是 `metrics.py:29-30` 强制 float32 计算下的**测量地板**（同一预测 float64 为 4.6721e-08，即真实误差；地板/真值 = 1.2714×），距门槛余量按官方值 1683×、按真值 2140×，但该 5.9403e-08 的有效位数到此为止（独立复算 `scripts/analysis/f64_metric_floor.py` 与该值一致到 7.4 位，**非逐位**——`metrics.py` 用 float32 张量累加，复算用 float64 累加）；§4 扫描中 `d=128`（1.88e-08）与 `d=256`（5.23e-08）均在地板之下，官方口径无法区分。**模型类结论更正**：per-bin 逐 bin 类并未出局——同条件重测其闭式上限为 **2.4727e-05**（低于门槛 4×），dense 超出其 473×，颠覆了"per-bin 出局"的早期判断；该类地板机制为 `‖y_high‖/‖y‖ = 1.4458e-03`（目标 99.996% 能量集中在 2–20 Hz 的窄带）。
 
 ## 与其他项目的关系
 
