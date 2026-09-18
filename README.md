@@ -1,201 +1,198 @@
-# OLED neural operator
+# OLED Microstage Disturbance Surrogate
 
-FNO1d surrogate for **OLED microstage disturbance estimation**: maps actuator
-force + encoder displacement trajectories to the disturbance force trajectory
-(inverse disturbance problem), trained on the synthetic HDF5 benchmark
-`neural_operator_2` (train 5000 / val 500 / test 200, 501 time points per
-sample, dt = 1 ms).
+A surrogate model for **inverse disturbance estimation** on the OLED inkjet-printer
+microstage: given the actuator force and encoder displacement trajectories, predict the
+external disturbance force trajectory acting on the mover.
 
-> **Status**: exploration phase — pipeline fully usable. The
-> train/evaluate loop is fully usable; 4 historical 500-epoch experiments are
-> committed under `experiments/`. The dataset is fully uploaded locally and
-> the complete pipeline was smoke-tested end-to-end on 2026-08-23.
->
-> **Performance goal achieved (2026-08-24)**: `test.relative_l2 = 3.078e-6`
-> (official `scripts/evaluate.py`, re-checked at 2.84e-6) vs. target `≤ 1e-4`
-> — a 32–35× margin, at **zero training cost**, via analytic inverse-operator
-> injection into a linear FNO (modes=252, full spectrum; F5). The best
-> pure-gradient-trained model (E31) reached `2.03e-4`. See
-> [`OPTIMIZATION_REPORT.md`](./OPTIMIZATION_REPORT.md) §8 and
-> [`experiments/analysis/2026-08-23/ANALYSIS_REPORT.md`](./experiments/analysis/2026-08-23/ANALYSIS_REPORT.md).
-
-## Quick links
-
-- [中文文档（Chinese README）](./README_zh.md) — English version is the canonical source
-- [`CLAUDE.md`](./CLAUDE.md) — AI assistant instructions
-- [`configs/config.yaml`](./configs/config.yaml) — default experiment config
-- [Data](#data) — `~/data/neural_operator_2` (default data root, read-only)
-- [`src/utils/paths.py`](./src/utils/paths.py) — data root resolution logic
-
-## Project structure
-
-```
-oled-neural-operator/
-├── CLAUDE.md  README.md  README_zh.md  requirements.txt
-├── configs/config.yaml       # default: 8ch (force + encoder_displacement) → 2ch
-├── src/                      # data / models / training / utils (paths, config, ...)
-├── scripts/                  # train.py / evaluate.py + train.sh / evaluate.sh
-│   └── analysis/             # dataset-intrinsic analysis + analytic inverse-operator injection
-├── tests/                    # unittest, stdlib only (config 5 + paths 7)
-├── experiments/              # run artifacts; historical runs + 2026-08-23 analysis committed
-├── outputs/                  # SLURM job artifacts (job_*) + final analytic model (ls_init_f1/, gitignored)
-├── checkpoints/  logs/       # run-artifact placeholders (.gitkeep only)
-└── .gitignore
-```
-
-Run artifacts live under `experiments/` (config snapshot, `train.log`,
-`metrics.csv`, `history.json`, checkpoints). `outputs/`, `checkpoints/`, and
-`logs/` are run-artifact placeholders for future artifact classes.
-
-## Data
-
-Dataset: `neural_operator_2`, one `.h5` per simulation. Data root resolution
-(see `src/utils/paths.py`), highest priority first:
-
-1. **Explicit path** — `--data-root` on the CLI, or a non-empty `data.root`
-   in config (e.g. the absolute path stored in a historical checkpoint);
-2. `$DATA_ROOT/neural_operator_2` — project-level environment variable;
-3. `~/data/neural_operator_2` — final fallback, with an explicit stderr
-   warning (once per process).
-
-`configs/config.yaml` declares `data.root: null` so the path is resolved at
-run time; `apply_data_root` writes the resolved absolute path back into the
-run's config snapshot and checkpoints, keeping each run self-contained.
-
-A second frozen dataset `neural_operator_3` (manifest 3.0, same generator
-physics — equation `M q̈ = B u + f_dist`, `B` and `H` unchanged) adds
-**preroll 0.5 s + integration substeps 5** for solver settling/accuracy and
-is the official dataset of the M3/M5/M6 campaigns.  Its recommended_problem
-is identical (inverse 8→2); M5/M6 run the 13-channel state-input formulation
-(see below) via `configs/m5*.yaml` / `configs/m61_spectral.yaml`, which point
-`data.root` explicitly at `~/data/neural_operator_3`.
-
-## Default problem configuration
-
-The default problem follows the dataset manifest's `recommended_problem`:
-**8 input channels** (`force` ×4 + `encoder_displacement` ×4) →
-**2 target channels** (`disturbance`), 501 time points.
-
-```bash
-scripts/train.sh --config configs/config.yaml
-```
-
-The committed campaign experiments (historical 4 × 500-epoch FNO runs, and
-the M3/M5/M6 campaigns) instead use the 13-channel state-input formulation
-(`force` + `displacement` + `velocity` + `acceleration` → `disturbance`)
-on `neural_operator_3`. Reproduce it with:
-
-```bash
-scripts/train.sh \
-  --input-fields force displacement velocity acceleration \
-  --target-fields disturbance
-```
-
-## Reproducibility
-
-- **Seeding**: `seed` in config drives PyTorch generators and worker seeding
-  (`src/utils/seed.py`); run directory names embed the seed.
-- **Determinism**: DataLoader order is reproducible via seeded generators;
-  training/validation/test order is fixed.
-- **Checkpoints**: v2 schema stores the resolved config, legacy args, and RNG
-  state (python/numpy/torch/cuda); `--resume` restores everything and can
-  swap LR/scheduler.
-- **Tests**: `python -m unittest discover -s tests -v` (stdlib only, no
-  torch/h5py required).
-- **M6 pure-spectral recipe** (SGD-trained gate winner, `OPTIMIZATION_REPORT.md` §11):
-  ```bash
-  .venv/bin/python scripts/analysis/spectral_whiten.py --data-root ~/data/neural_operator_3 \
-    --output outputs/spectral_whiten/whiten.pt        # deterministic, ~7 s
-  .venv/bin/python scripts/train.py --config configs/m61_spectral.yaml   # 120 ep, ~3.2 min CPU
-  .venv/bin/python scripts/evaluate.py --checkpoint <run>/best_model.pt  # official acceptance
-  ```
-
-## Status
-
-| Stage | Description | Now |
-| --- | --- | --- |
-| Exploration | Training/eval loop usable, 4 historical runs committed | ✅ |
-| Performance goal | `test.relative_l2 ≤ 1e-4` on `neural_operator_3` (13ch) | ✅ **3.078e-6** (F5, zero-training analytic injection, §8.3) |
-| Hard gate via pure training (M6) | `test.relative_l2 ≤ 1e-4` on `neural_operator_3`, SGD-trained | ✅ **4.87e-6** worst seed (20.5× margin) — pure-spectral shared map, 26 trainable params, zero injection |
-| 8ch recommended-problem gate (SGD) | `test.relative_l2 ≤ 1e-4` on the official 8ch problem (force + encoder_displacement → disturbance), SGD-trained | ✅ **9.480689e-05** (3/3 seeds, 5.4% margin, 2026-08-26) — PCA-1280 projection + fixed-diag-preconditioned SGD+momentum, zero injection (§12.5) |
-| Best learned model | Pure-spectral shared map, SGD 120ep (M6 S5a recipe) | `2.84e-6`–`4.87e-6` (3 seeds) — replaces the E31 FNO limit `2.03e-4` |
-| Maturity | Reproducible docs + NOTES.md for all campaigns | — |
-| Publication | Paper-ready experiments and figures | — |
+The model is trained on a frozen synthetic benchmark generated by the companion
+repository [`oled-microstage-simulation`](../oled-microstage-simulation). This repository
+is one of the two delivered at formal acceptance; the on-site procedure is
+[ACCEPTANCE.md](ACCEPTANCE.md).
 
 ---
 
-This project trains and evaluates a one-dimensional Fourier neural operator on
-the OLED microstage HDF5 dataset. Experiment choices live in
-`configs/config.yaml`; Python modules own construction and runtime behavior.
+## 1. Task
 
-Train with the configuration defaults:
+Inverse (disturbance) problem on a fixed 1 kHz time grid:
 
-```bash
-scripts/train.sh --config configs/config.yaml
+```
+raw input  : actuator force (4)  +  encoder displacement (4)   ->  8 channels
+target     : disturbance force (X, Y)                          ->  2 channels
+raw task   : [501, 8]  ->  [501, 2]         (0.5 s at 1 kHz)
 ```
 
-Set `PYTHON_BIN` when the desired interpreter is not already active:
+The disturbance is a **synthetic benchmark signal**, never a device measurement.
 
-```bash
-PYTHON_BIN="$HOME/miniconda3/envs/d2l/bin/python" \
-  scripts/train.sh --config configs/config.yaml --device cuda
+## 2. Dataset
+
+The canonical acceptance dataset:
+
+```
+/nishome/charliewang/data/oled_microstage_inverse_disturbance
 ```
 
-Command-line flags override the loaded config. `--epochs` is the number of
-additional epochs when `--resume` is supplied.
+| item | value |
+|---|---|
+| manifest schema | `neural_operator_dataset_manifest/3.0` |
+| HDF5 schema | `5.0` |
+| duration / sampling | 0.5 s at 1 kHz, 501 time points |
+| split | train 5000 / val 500 / test 200 (manifest-defined, no overlap) |
+| solver | Exudyn GeneralizedAlpha, `preroll_s = 0.5`, `integration_substeps = 5` |
+| recommended problem | `inverse_disturbance` |
 
-Select Adam instead of the default AdamW through configuration or the CLI:
+Version information lives in the dataset manifest and in each sample's `/metadata`
+group (generator git commit, solver, dependency versions, config hash). The directory
+name carries no version number, by design.
 
-```bash
-scripts/train.sh --optimizer adam --learning-rate 1e-3
+Override the location with `--data-root` or `$DATA_ROOT`; the config documents the
+canonical path.
+
+## 3. Input / output contract
+
+**The raw task is `[501, 8] -> [501, 2]`.** The model's internal input tensor is 16
+channels wide; the extra eight are **derived deterministically from the eight raw
+inputs** (see §4) and are not additional data.
+
+| stage | width | contents |
+|---|---|---|
+| raw acceptance input | **8** | `force` (4) + `encoder_displacement` (4), read from HDF5 |
+| model internal features | 16 | raw 8 + first differences (4) + second differences (4) |
+| target | **2** | `disturbance/force` (X, Y) |
+
+No state variable (`q`, `q_dot`, `q_ddot`) and no target ever enters the model input:
+`data.input_fields` selects `force` and `encoder_displacement` only, and the preprocessing
+transform reads nothing else.
+
+## 4. Final preprocessing
+
+`diff_features` (`src/data/preprocessing.py`): append the 3-point first and second
+central differences of the four encoder channels, growing 8 channels to 16.
+
+It runs in **float64** (`data.transform_dtype: float64`). This is required, not
+cosmetic: the HDF5 values are float64 and the second difference divides by `dt²`, so
+downgrading before differentiating injects a quantisation floor (`eps32 * |x| / dt²`)
+that no later upcast can undo.
+
+The derived channels exist because the encoder channels carry a start-up drift ramp;
+the appended difference rows are the finite-difference acceleration estimates.
+
+## 5. Final model
+
+`SpectralDenseMap` (`src/models/spectral_dense.py`): rfft → fixed whitening → trainable
+dense map → irfft, float64 end to end.
+
+- **One trainable parameter**, `W`, of shape `256 × 1004` = **257,024 parameters**.
+- Fixed, non-trainable buffers `sd`, `Vd`, `Sd`, `sy` come from the train-only basis.
+- It is **not** a Fourier Neural Operator. It is a dense linear map on the flattened
+  per-bin spectrum; it has no nonlinearity.
+
+## 6. Gradient training
+
+| item | value |
+|---|---|
+| optimizer | **SGD**, lr `2.684e5`, momentum 0.0, weight decay 0.0 |
+| scheduler | cosine annealing to 0 |
+| epochs | 100 |
+| loss | MSE |
+| batch | full train batch (5000), eval batch 128 |
+| validation | every 5 epochs |
+| best checkpoint | lowest **validation MSE** |
+| device | **CPU** (the canonical acceptance path) |
+| wall clock | ~60 s |
+
+`loss.backward()` and `optimizer.step()` run once per epoch; the run starts from a fresh
+random initialization and never resumes.
+
+Two operational facts:
+
+- **Do not fine-tune from a checkpoint.** The delivered model is the product of a single
+  from-scratch run; resume fine-tuning of this model class is known to not help, and the
+  pipeline has no resume path by design.
+- **The learning rate is calibrated for the full 5000-sample batch.** MSE averages over
+  the batch, so the loss Hessian scales as `1/numel`; training on a small subset with the
+  canonical lr diverges. `--max-train-samples` is a wiring-check mode, not an acceptance mode.
+
+## 7. Acceptance metric
+
+**Global** relative L2 over the whole test split at once:
+
+```
+sqrt( sum over all test samples, all time points, both channels (prediction - target)^2 )
+----------------------------------------------------------------------------------------
+sqrt( sum over all test samples, all time points, both channels  target^2 )
 ```
 
-## Continue training from a checkpoint
+Not a per-sample relative L2 averaged afterwards. It covers all 200 test samples ×
+501 time points × 2 channels = 200,400 elements.
 
-Pass `--resume` a `last_model.pt` checkpoint and set `--epochs` to the number
-of additional epochs. To restart from a specific learning rate, pass
-`--learning-rate` and do not pass `--keep-resume-learning-rate`:
+**Threshold: `1e-4`.**
 
-```bash
-PYTHON_BIN="$HOME/miniconda3/envs/d2l/bin/python" \
-  scripts/train.sh \
-  --resume experiments/PREVIOUS_RUN/last_model.pt \
-  --epochs 500 \
-  --learning-rate 1e-5 \
-  --output-dir experiments/continued_lr1e-5 \
-  --device cuda
-```
+Two values are reported, because they differ and the difference is understood:
 
-The model and optimizer state are restored, the optimizer learning rate is
-reset to `1e-5`, and a fresh configured scheduler is created for the additional
-500 epochs. Use a new output directory so the previous run remains intact.
+- `relative_l2` — computed exactly as `src/training/metrics.py` does, which promotes to
+  float32 before accumulating. **This is the official number.**
+- `relative_l2_float64` — the same prediction accumulated in float64. **This is the true
+  model error.** The float32 accumulation over-reports by ~1.27×.
 
-To retain the learning rate stored in the checkpoint instead, add
-`--keep-resume-learning-rate` and omit `--learning-rate` unless you also want
-to change the configured scheduler's reference learning rate.
+`pass` requires **both** to be under the threshold.
 
-Each saved run creates an isolated directory beneath `experiments/` unless
-`--output-dir` is explicitly supplied. A run contains the resolved
-`config.yaml`, `train.log`, `metrics.csv`, `history.json`, and the enabled
-`best_model.pt` and `last_model.pt` checkpoints. An explicit non-empty output
-directory is protected unless `--overwrite` is supplied.
+## 8. Current verified result
 
-Evaluate without retraining:
+| path | value |
+|---|---|
+| official (`relative_l2`, float32 accumulation) | **`5.940277290056465e-08`** |
+| float64 direct recomputation | **`4.672084e-08`** |
+| threshold | `1e-4` |
+| margin | 1,683× official / 2,140× true |
+
+Each acceptance run writes its own result to `<run-dir>/test_metrics.json`. The figures
+above are the recorded reference; a fresh rehearsal reproduces the same order of
+magnitude (see ACCEPTANCE.md).
+
+## 9. Quick start
 
 ```bash
-scripts/evaluate.sh --checkpoint experiments/RUN/best_model.pt
+cd /nishome/charliewang/forge-projects/oled-neural-operator
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python -m unittest discover -s tests      # 47 tests
 ```
 
-Version-2 checkpoints include the resolved config and reproducibility state,
-while retaining the historical `args`, `model_state_dict`,
-`optimizer_state_dict`, and `scheduler_state_dict` keys.
+Full acceptance flow — see [ACCEPTANCE.md](ACCEPTANCE.md):
 
-## Package layout
+```bash
+RUN=runs/acceptance_$(date +%Y%m%d-%H%M%S)
 
-- `src/data`: dataset indexing, preprocessing selection, and DataLoader assembly
-- `src/models`: the FNO implementation and model factory
-- `src/training`: component factories, epoch loops, validation, and trainer
-- `src/utils`: config, checkpoints, logging, device selection, and seeding
-- `scripts/train.py`: training CLI and application assembly
-- `scripts/evaluate.py`: checkpoint-only evaluation
-- `scripts/train.sh` and `scripts/evaluate.sh`: direct shell launchers
+.venv/bin/python scripts/show_environment.py  --config configs/acceptance.yaml --run-dir "$RUN"
+.venv/bin/python scripts/inspect_dataset.py   --config configs/acceptance.yaml --run-dir "$RUN"
+.venv/bin/python scripts/fit_basis.py         --config configs/acceptance.yaml --run-dir "$RUN"
+.venv/bin/python scripts/train.py             --config configs/acceptance.yaml --run-dir "$RUN" --device cpu
+.venv/bin/python scripts/evaluate.py          --run-dir "$RUN"
+.venv/bin/python scripts/report.py            --run-dir "$RUN"
+```
+
+## 10. Repository structure
+
+```
+configs/acceptance.yaml        the final configuration (the only one)
+requirements.txt               torch / numpy / h5py / matplotlib
+scripts/
+  show_environment.py          STEP 0  environment record -> environment.json/.txt
+  inspect_dataset.py           STEP 1  dataset summary    -> dataset_summary.json
+  fit_basis.py                 STEP 3  train-only spectral basis -> spectral_basis.pt
+  train.py                     STEP 4  SGD training       -> best_model.pt, history.json
+  evaluate.py                  STEP 5  full test split    -> test_metrics.json, predictions.npz
+  report.py                    STEP 6  figures            -> figures/*.png
+src/
+  data/                        HDF5 dataset, preprocessing, dataloaders, in-memory cache
+  models/                      SpectralDenseMap + GridAdapter + factory
+  training/                    trainer, epoch loop, validation, metrics, optimizer factories
+  utils/                       config, checkpoints, run logging, device, paths, seeding
+tests/                         unittest (stdlib); one end-to-end acceptance smoke test
+runs/                          generated acceptance artifacts (not committed)
+```
+
+## 11. Formal acceptance workflow
+
+The complete, copy-paste, on-site terminal procedure — with the expected output of every
+step — is [ACCEPTANCE.md](ACCEPTANCE.md).
